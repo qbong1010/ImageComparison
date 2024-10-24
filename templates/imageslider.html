@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>몽골 현황 분석 윈도우</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            position: relative;
+            width: 90vw;  /* 뷰포트 너비의 90% */
+            height: 90vh; /* 뷰포트 높이의 90% */
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            margin: auto;
+            padding: 0 10px; /* 좌우 여백 추가 */
+        }
+        .image {
+            position: absolute;
+            width: 100% !important;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f0f0f0; /* 이미지 로딩 전 배경색 */
+        }
+        .image:first-child {
+            z-index: 2;
+            clip-path: inset(0 calc(100% - var(--clip-position)) 0 0);
+        }
+        .image:last-child {
+            z-index: 1;
+        }
+        .image img {
+            width: auto;
+            height: auto;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .slider {
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            background: #666;
+            cursor: ew-resize;
+            transform: translateX(-50%);
+            z-index: 3;
+        }
+        /* 슬라이더 핸들 수정 */
+        .slider::before {
+            content: '<>';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;  /* 30px에서 20px로 크기 감소 */
+            height: 20px; /* 30px에서 20px로 크기 감소 */
+            background: white;
+            border: 2px solid #666;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;  /* 텍스트 크기도 약간 감소 */
+            color: #666;
+            font-weight: 900;  /* bold에서 900으로 변경하여 더 굵게 */
+            font-family: monospace;
+        }
+        /* 드롭다운 스타일 */
+        .controls {
+            margin-bottom: 20px;
+            width: 90vw;
+            display: flex;
+            justify-content: center;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            width: 200px;
+        }
+        /* 투명도 컨트롤 스타일 추가 */
+        .controls {
+            margin-bottom: 20px;
+            width: 90vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .opacity-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .opacity-control label {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        input[type="range"] {
+            width: 200px;
+            height: 5px;
+            -webkit-appearance: none;
+            background: #ddd;
+            border-radius: 5px;
+            outline: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            background: #666;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            background: #666;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+<!-- 드롭다운 추가 -->
+<div class="controls">
+    <select id="imageSelector">
+        <option value="">이미지를 선택하세요</option>
+        {% for name in image_names %}
+        <option value="{{ name }}">{{ name }}</option>
+        {% endfor %}
+    </select>
+    <div class="opacity-control">
+        <label for="opacitySlider">Before 이미지 투명도: <span id="opacityValue">100%</span></label>
+        <input type="range" id="opacitySlider" min="0" max="100" value="100">
+    </div>
+</div>
+
+<div class="container">
+    <div class="image">
+        <img id="beforeImage" src="" alt="이미지 1">
+    </div>
+    <div class="image">
+        <img id="afterImage" src="" alt="이미지 2">
+    </div>
+    <div class="slider" id="slider"></div>
+</div>
+
+<script>
+    // 이미지 선택 기능
+    const imageSelector = document.getElementById('imageSelector');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
+    const slider = document.getElementById('slider');
+    const container = slider.parentElement;
+    
+    let isDragging = false;
+
+    // 이미지 선택 이벤트
+    imageSelector.addEventListener('change', function() {
+        const selectedName = this.value;
+        if (selectedName) {
+            beforeImage.src = `/before_after/${selectedName}_before.png`;
+            afterImage.src = `/before_after/${selectedName}_after.png`;
+        } else {
+            beforeImage.src = '';
+            afterImage.src = '';
+        }
+    });
+
+    // 슬라이더 드래그 이벤트
+    slider.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        document.addEventListener('mousemove', slide);
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        document.removeEventListener('mousemove', slide);
+    });
+
+    function slide(e) {
+        if (!isDragging) return;
+        const containerRect = container.getBoundingClientRect();
+        let offsetX = e.clientX - containerRect.left;
+        
+        // 경계값 설정
+        if (offsetX < 0) offsetX = 0;
+        if (offsetX > containerRect.width) offsetX = containerRect.width;
+        
+        // 슬라이더 위치 업데이트
+        slider.style.left = offsetX + 'px';
+        
+        // 슬라이더 중앙을 기준으로 클리핑 위치 계산
+        const handleWidth = 20;
+        const centerOffset = offsetX - (handleWidth / 2);
+        const clipPosition = (centerOffset / containerRect.width) * 100;
+        container.style.setProperty('--clip-position', clipPosition + '%');
+    }
+
+    // 초기 위치 설정
+    window.addEventListener('DOMContentLoaded', () => {
+        const initialOffset = container.offsetWidth / 2;
+        slider.style.left = initialOffset + 'px';
+        
+        // 초기 클리핑 위치 설정
+        const handleWidth = 20;
+        const centerOffset = initialOffset - (handleWidth / 2);
+        const clipPosition = (centerOffset / container.offsetWidth) * 100;
+        container.style.setProperty('--clip-position', clipPosition + '%');
+        
+        // 페이지 로드 시 첫 번째 이미지 자동 선택
+        const firstOption = imageSelector.querySelector('option:not([value=""])');
+        if (firstOption) {
+            imageSelector.value = firstOption.value;
+            // 이미지 로드 트리거
+            const event = new Event('change');
+            imageSelector.dispatchEvent(event);
+        }
+    });
+
+    // 이미지 로드 완료 후 컨테이너 크기 조정
+    function adjustContainer() {
+        const container = document.querySelector('.container');
+        const img = beforeImage; // 또는 afterImage
+        
+        if (img.naturalWidth && img.naturalHeight) {
+            const windowWidth = window.innerWidth * 0.9;
+            const windowHeight = window.innerHeight * 0.9;
+            
+            const imgRatio = img.naturalWidth / img.naturalHeight;
+            const windowRatio = windowWidth / windowHeight;
+            
+            if (imgRatio > windowRatio) {
+                // 이미지가 더 넓은 경우
+                container.style.width = '90vw';
+                container.style.height = (windowWidth / imgRatio) + 'px';
+            } else {
+                // 이미지가 더 높은 경우
+                container.style.height = '90vh';
+                container.style.width = (windowHeight * imgRatio) + 'px';
+            }
+        }
+    }
+
+    // 이미지 로드 이벤트에 컨테이너 크기 조정 추가
+    beforeImage.addEventListener('load', adjustContainer);
+    afterImage.addEventListener('load', adjustContainer);
+
+    // 윈도우 리사이즈 시 컨테이너 크기 재조정
+    window.addEventListener('resize', adjustContainer);
+
+    // 투명도 조절 기능 추가
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValue = document.getElementById('opacityValue');
+    const beforeImageContainer = document.querySelector('.image:first-child');
+    
+    opacitySlider.addEventListener('input', function() {
+        const opacity = this.value / 100;
+        beforeImageContainer.style.opacity = opacity;
+        opacityValue.textContent = this.value + '%';
+    });
+    
+    // 이미지 선택 이벤트에 투명도 리셋 추가
+    imageSelector.addEventListener('change', function() {
+        const selectedName = this.value;
+        if (selectedName) {
+            beforeImage.src = `/before_after/${selectedName}_before.png`;
+            afterImage.src = `/before_after/${selectedName}_after.png`;
+            // 투명도 리셋
+            opacitySlider.value = 100;
+            beforeImageContainer.style.opacity = 1;
+            opacityValue.textContent = '100%';
+        } else {
+            beforeImage.src = '';
+            afterImage.src = '';
+        }
+    });
+</script>
+
+</body>
+</html>
